@@ -44,20 +44,35 @@ def cleanData(f):
             data.append( row )
         else:
             continue
-            
-    data.sort() #TODO turn this into a more useful (int) sort?
 
-    return data
+    # grab header
+    header = [data[0]]
+
+    # sort by first GEOROCID in first column, ignoring header row
+    body = sorted(data[1:], key = lambda i: int( re.split('\[|\]', i[0])[1] ) )
+
+    # grab all the reference numbers for good measure
+    refNos = []
+    for row in data[1:]:
+        newNos = filter( None, re.split('\D', row[0]) ) # filter() drops ''
+        for i in newNos:
+                refNos.append( i )
+    
+    refNos = list(set(refNos)) # condense list down to unique values
+    
+    sortedData = header + body
+    
+    return refNos, sortedData
 
 ###
 # refs: [#, first surname + "et al.", year, linkified doi]
 ###
 
-def cleanRefs(f, data):
-    refs = [["GEOROC ID", "Authors", "Year", "DOI"]]
+def cleanRefs(f, data, refNos):
+    refs = [["GEOROC ID", "Authors", "Year", "DOI", "Title"]]
     
     for line in f:
-        testSplit  = re.split("(?<=\])\s|\s\s+", line)
+        testSplit  = re.split("(?<=\])\s|\s\s+", line) #TODO add filter(None, testSplit)???
         
         # pull out the GEOROC_ID
         try:
@@ -89,16 +104,26 @@ def cleanRefs(f, data):
             doiLink = "https://doi.org/doi/" + doi
         else:
             doiLink = ''
+            
+        # sort out the title...
+        try:
+            title = testSplit[2]
+        except:
+            title = ''
            
-        # squish it all together! 
-        refs.append( [GEOROCID, authors, year, doiLink] )
-        
-        # TODO discard any row that doesn't feature in the data lump?
+        # discard any reference not in cleanedData & squish it all together!
+        try:
+            testID = str(re.split('\D', GEOROCID)[1])
+           
+            if testID in refNos:
+                print "Match!"
+                refs.append( [GEOROCID, authors, year, doiLink, title] )
+            else:
+                print "No match!"
+        except:
+            continue
 
     return refs
-
-# ["GEOROC ID", "Authors", "", "Title", "Journal", "Year", "Pages", "DOI"]
-#['"[24479]', 'REAGAN M. K., TURNER SIMON P., HANDLEY H. K., TURNER M. B., BEIER C., CAULFIELD J. T., PEATE D. W.:', '', '210PB-226RA DISEQUILIBRIA IN YOUNG GAS-LADEN MAGMAS', 'SCIENTIFIC REPORTS 7 (45186)', '[2017]', '', ' doi: 10.1038/srep45186"']
 
 ###
 # actually do the thing!
@@ -112,17 +137,22 @@ if __name__ == '__main__':
     files = sys.argv[1:]
     
     for filename in files:
+    
+        name = filename.split('.')[0] 
+        dataName = "%s_data.csv" % name
+        refsName = "%s_refs.csv" % name
+    
         with open(filename, 'r') as f:
             [data, refs] = loadData(f)
-            cleanedData = cleanData(data)
-            cleanedRefs = cleanRefs(refs, cleanedData)
+            [refNos, cleanedData] = cleanData(data)
+            cleanedRefs = cleanRefs(refs, cleanedData, refNos)
 
-#    with open('data-out.csv', 'a') as f:
-#            csvwriter = csv.writer(f)
-#            for row in cleanedData:
-#                csvwriter.writerow(row) 
+        with open(dataName, 'w') as f:
+            csvwriter = csv.writer(f)
+            for row in cleanedData:
+                csvwriter.writerow(row) 
 
-    with open('refs-out.csv', 'a') as f:
+        with open(refsName, 'w') as f:
             csvwriter = csv.writer(f)
             for row in cleanedRefs:
-                csvwriter.writerow(row) 
+                    csvwriter.writerow(row) 
